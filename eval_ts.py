@@ -49,7 +49,6 @@ def evaluate_one(args, pred_len, device):
         drop_last=False,
     )
 
-    criterion = nn.MSELoss()
     losses = []
     with torch.no_grad():
         for batch_x, batch_y, _, _ in val_loader:
@@ -63,7 +62,11 @@ def evaluate_one(args, pred_len, device):
             )
             pred = model(batch_x, None, dec_inp, None)[:, -pred_len:, :]
             true = batch_y[:, -pred_len:, :]
-            losses.append(criterion(pred, true).item())
+            pred = pred.detach().cpu().numpy()
+            true = true.detach().cpu().numpy()
+            pred = standardizer.inverse_transform(pred)
+            true = standardizer.inverse_transform(true)
+            losses.append(float(np.mean(np.square(true - pred))))
 
     return float(np.mean(losses))
 

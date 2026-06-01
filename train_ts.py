@@ -12,6 +12,11 @@ from torch.utils.data import DataLoader
 from data_provider.data_loader_ts import TSForecastDataset
 from model.iTransformer import Model as ITransformer
 
+try:
+    from tqdm.auto import tqdm
+except ImportError:
+    tqdm = None
+
 
 def parse_pred_lens(text):
     return [int(x.strip()) for x in text.split(",") if x.strip()]
@@ -135,7 +140,17 @@ def train_one_horizon(args, pred_len, device):
     for epoch in range(1, args.train_epochs + 1):
         model.train()
         train_losses = []
-        for batch_x, batch_y, _, _ in train_loader:
+        progress = train_loader
+        if tqdm is not None:
+            progress = tqdm(
+                train_loader,
+                total=len(train_loader),
+                desc=f"pred_len={pred_len} epoch={epoch:03d}",
+                leave=False,
+                dynamic_ncols=True,
+            )
+
+        for step, (batch_x, batch_y, _, _) in enumerate(progress, start=1):
             optimizer.zero_grad(set_to_none=True)
             if args.use_amp and device.type == "cuda":
                 outputs, target = forward_batch(model, batch_x, batch_y, args, pred_len, device, use_amp=True)
@@ -149,6 +164,19 @@ def train_one_horizon(args, pred_len, device):
                 loss.backward()
                 optimizer.step()
             train_losses.append(loss.item())
+
+            if tqdm is not None:
+                progress.set_postfix(
+                    loss=f"{loss.item():.6f}",
+                    avg=f"{float(np.mean(train_losses)):.6f}",
+                    lr=f"{optimizer.param_groups[0]['lr']:.1e}",
+                )
+            elif step % args.log_interval == 0 or step == len(train_loader):
+                print(
+                    f"pred_len={pred_len} epoch={epoch:03d} "
+                    f"step={step}/{len(train_loader)} "
+                    f"loss={loss.item():.6f} avg={float(np.mean(train_losses)):.6f}"
+                )
 
         train_loss = float(np.mean(train_losses))
         val_loss = evaluate(model, val_loader, criterion, args, pred_len, device)
@@ -195,6 +223,7 @@ def main():
     parser.add_argument("--activation", default="gelu")
     parser.add_argument("--use_norm", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument("--log_interval", type=int, default=20)
     parser.add_argument("--seed", type=int, default=2023)
     parser.add_argument("--use_amp", action="store_true", default=True)
     parser.add_argument("--no_amp", action="store_false", dest="use_amp")

@@ -3,8 +3,12 @@ import torch.nn as nn
 import numpy as np
 from math import sqrt
 from utils.masking import TriangularCausalMask, ProbMask
-from reformer_pytorch import LSHSelfAttention
 from einops import rearrange
+
+try:
+    from reformer_pytorch import LSHSelfAttention
+except ImportError:
+    LSHSelfAttention = None
 
 
 # Code implementation from https://github.com/thuml/Flowformer
@@ -304,6 +308,8 @@ class ReformerLayer(nn.Module):
     def __init__(self, attention, d_model, n_heads, d_keys=None,
                  d_values=None, causal=False, bucket_size=4, n_hashes=4):
         super().__init__()
+        if LSHSelfAttention is None:
+            raise ImportError("Install reformer_pytorch to use ReformerLayer.")
         self.bucket_size = bucket_size
         self.attn = LSHSelfAttention(
             dim=d_model,
@@ -328,4 +334,3 @@ class ReformerLayer(nn.Module):
         B, N, C = queries.shape
         queries = self.attn(self.fit_length(queries))[:, :N, :]
         return queries, None
-
