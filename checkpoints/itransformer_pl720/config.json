@@ -1,0 +1,23 @@
+{
+  "seq_len": 96,
+  "label_len": 48,
+  "pred_len": 720,
+  "enc_in": 100,
+  "dec_in": 100,
+  "c_out": 100,
+  "d_model": 512,
+  "n_heads": 8,
+  "e_layers": 2,
+  "d_layers": 1,
+  "d_ff": 2048,
+  "moving_avg": 25,
+  "factor": 1,
+  "distil": true,
+  "dropout": 0.1,
+  "embed": "fixed",
+  "freq": "h",
+  "activation": "gelu",
+  "output_attention": false,
+  "class_strategy": "projection",
+  "use_norm": 1
+}

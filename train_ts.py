@@ -135,9 +135,25 @@ def train_one_horizon(args, pred_len, device):
     best_val = float("inf")
     bad_epochs = 0
     history = []
+    start_epoch = 1
+    last_checkpoint_path = os.path.join(run_dir, "last_checkpoint.pth")
+
+    if args.resume and os.path.exists(last_checkpoint_path):
+        checkpoint = torch.load(last_checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint["model"])
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        if "scaler" in checkpoint and args.use_amp and device.type == "cuda":
+            scaler.load_state_dict(checkpoint["scaler"])
+        best_val = checkpoint.get("best_val", best_val)
+        bad_epochs = checkpoint.get("bad_epochs", bad_epochs)
+        history = checkpoint.get("history", history)
+        start_epoch = checkpoint["epoch"] + 1
+        print(f"Resumed pred_len={pred_len} from epoch {checkpoint['epoch']}; best val_mse={best_val:.6f}")
+    elif args.resume:
+        print(f"No resume checkpoint found for pred_len={pred_len}; starting from scratch.")
 
     print(f"\n===== Training pred_len={pred_len} =====")
-    for epoch in range(1, args.train_epochs + 1):
+    for epoch in range(start_epoch, args.train_epochs + 1):
         model.train()
         train_losses = []
         progress = train_loader
@@ -193,6 +209,19 @@ def train_one_horizon(args, pred_len, device):
                 print(f"Early stopping at epoch {epoch}; best val_mse={best_val:.6f}")
                 break
 
+        torch.save(
+            {
+                "epoch": epoch,
+                "model": model.state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "scaler": scaler.state_dict(),
+                "best_val": best_val,
+                "bad_epochs": bad_epochs,
+                "history": history,
+            },
+            last_checkpoint_path,
+        )
+
     with open(os.path.join(run_dir, "history.json"), "w", encoding="utf-8") as f:
         json.dump({"best_val_mse": best_val, "history": history}, f, indent=2)
 
@@ -227,6 +256,7 @@ def main():
     parser.add_argument("--seed", type=int, default=2023)
     parser.add_argument("--use_amp", action="store_true", default=True)
     parser.add_argument("--no_amp", action="store_false", dest="use_amp")
+    parser.add_argument("--resume", action="store_true")
     parser.add_argument("--gpu", type=int, default=0)
     args = parser.parse_args()
 

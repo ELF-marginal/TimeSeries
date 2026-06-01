@@ -79,6 +79,14 @@ python train_ts.py --batch_size 192 --eval_batch_size 384
 python train_ts.py --pred_lens 96
 ```
 
+中断后继续训练：
+
+```bash
+python train_ts.py --resume
+```
+
+续训会读取每个模型目录下的 `last_checkpoint.pth`，恢复模型、优化器、AMP scaler、历史最优验证 MSE 和早停计数。续训时要保持 `d_model`、`n_heads`、`e_layers`、`d_ff` 等模型结构参数和上次一致。
+
 ## 生成预测文件
 
 训练完成后执行：
@@ -156,3 +164,74 @@ def MSE(pred, true):
 
 score = (mse_96 + mse_192 + mse_336 + mse_720) / 4
 ```
+
+只训练 96
+
+python train_ts.py --pred_lens 96 --learning_rate 0.0005 --batch_size 512 --eval_batch_size 1024 --d_model 512 --n_heads 8 --e_layers 2 --d_ff 2048 --train_epochs 50 --patience 12 --num_workers 4
+只训练 192：
+
+python train_ts.py --pred_lens 192 --learning_rate 0.0005 --batch_size 512 --eval_batch_size 1024 --d_model 512 --n_heads 8 --e_layers 2 --d_ff 2048 --train_epochs 50 --patience 12 --num_workers 4
+只训练 336：
+
+python train_ts.py --pred_lens 336 --learning_rate 0.0005 --batch_size 512 --eval_batch_size 1024 --d_model 512 --n_heads 8 --e_layers 2 --d_ff 2048 --train_epochs 50 --patience 12 --num_workers 4
+只训练 720：
+
+python train_ts.py --pred_lens 720 --learning_rate 0.0005 --batch_size 512 --eval_batch_size 1024 --d_model 512 --n_heads 8 --e_layers 2 --d_ff 2048 --train_epochs 50 --patience 12 --num_workers 4
+
+python eval_ts.py --pred_lens 96 --batch_size 1024 --num_workers 4
+
+python eval_ts.py --batch_size 1024 --num_workers 4
+
+现场验收时，如果老师给你一个测试输入文件，比如：
+添加到对话
+test.npy
+
+形状是：
+添加到对话
+250 x 96 x 100
+
+你用这个命令生成四个提交结果：
+bash
+
+
+
+python predict_ts.py --test_npy test.npy --output_dir predictions
+
+如果测试文件在别的路径，比如：
+添加到对话
+/data/test.npy
+
+就用：
+bash
+
+
+
+python predict_ts.py --test_npy /data/test.npy --output_dir predictions
+
+生成后四个文件在：
+添加到对话
+predictions/pred_96.npy
+predictions/pred_192.npy
+predictions/pred_336.npy
+predictions/pred_720.npy
+
+如果老师要求四个 .npy 就放在当前目录，可以这样：
+bash
+
+
+
+python predict_ts.py --test_npy test.npy --output_dir .
+
+然后当前目录会直接出现：
+添加到对话
+pred_96.npy
+pred_192.npy
+pred_336.npy
+pred_720.npy
+
+最后打包：
+bash
+
+
+
+python make_submission.py --name "时间序列-姓名学号"

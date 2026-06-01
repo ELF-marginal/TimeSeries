@@ -49,7 +49,9 @@ def evaluate_one(args, pred_len, device):
         drop_last=False,
     )
 
-    losses = []
+    scaled_losses = []
+    original_losses = []
+    persistence_losses = []
     with torch.no_grad():
         for batch_x, batch_y, _, _ in val_loader:
             batch_x = batch_x.float().to(device)
@@ -62,13 +64,25 @@ def evaluate_one(args, pred_len, device):
             )
             pred = model(batch_x, None, dec_inp, None)[:, -pred_len:, :]
             true = batch_y[:, -pred_len:, :]
-            pred = pred.detach().cpu().numpy()
-            true = true.detach().cpu().numpy()
-            pred = standardizer.inverse_transform(pred)
-            true = standardizer.inverse_transform(true)
-            losses.append(float(np.mean(np.square(true - pred))))
+            scaled_losses.append(float(torch.mean((true - pred) ** 2).item()))
 
-    return float(np.mean(losses))
+            pred_np = pred.detach().cpu().numpy()
+            true_np = true.detach().cpu().numpy()
+            hist_np = batch_x.detach().cpu().numpy()
+
+            pred_original = standardizer.inverse_transform(pred_np)
+            true_original = standardizer.inverse_transform(true_np)
+            hist_original = standardizer.inverse_transform(hist_np)
+            persistence = np.repeat(hist_original[:, -1:, :], pred_len, axis=1)
+
+            original_losses.append(float(np.mean(np.square(true_original - pred_original))))
+            persistence_losses.append(float(np.mean(np.square(true_original - persistence))))
+
+    return {
+        "scaled_mse": float(np.mean(scaled_losses)),
+        "original_mse": float(np.mean(original_losses)),
+        "persistence_mse": float(np.mean(persistence_losses)),
+    }
 
 
 def main():
@@ -91,12 +105,19 @@ def main():
 
     results = {}
     for pred_len in parse_pred_lens(args.pred_lens):
-        mse = evaluate_one(args, pred_len, device)
-        results[pred_len] = mse
-        print(f"MSE {pred_len}: {mse:.6f}")
+        metrics = evaluate_one(args, pred_len, device)
+        results[pred_len] = metrics
+        print(
+            f"MSE {pred_len}: "
+            f"original={metrics['original_mse']:.6f} | "
+            f"scaled={metrics['scaled_mse']:.6f} | "
+            f"last_value_baseline={metrics['persistence_mse']:.6f}"
+        )
 
-    avg = float(np.mean(list(results.values())))
+    avg = float(np.mean([x["original_mse"] for x in results.values()]))
+    baseline_avg = float(np.mean([x["persistence_mse"] for x in results.values()]))
     print(f"MSE Avg: {avg:.6f}")
+    print(f"Last-value baseline Avg: {baseline_avg:.6f}")
 
     if avg < 0.005:
         print("Validation level: below 0.005 bonus line")
